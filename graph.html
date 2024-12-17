@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<head>
+<style>
+body {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  margin: 0;
+  padding: 10px;
+  font-family: Arial, sans-serif;
+}
+.visualization-container {
+  display: flex;
+  flex-direction: column;
+  border: 3px solid #000000;
+  width: 95vw;
+  height: 90vh;
+  box-sizing: border-box;
+  padding: 12px;
+}
+.heading {
+  text-align: center;
+  margin-bottom: 10px;
+  font-size: 18px;
+  font-weight: bold;
+  color: #333;
+}
+.inner-container {
+  display: flex;
+  gap: 8px;
+  height: calc(100% - 35px);
+}
+.box {
+  border: 2px solid #0047AB;
+  padding: 5px;
+  height: 100%;
+  box-sizing: border-box;
+}
+#unconnected {
+  width: fit-content;
+  min-width: 300px;
+}
+#connected {
+  flex-grow: 1;
+  max-width: 75%;
+}
+rect {
+  stroke: black;
+  stroke-width: 1px;
+}
+.interactive rect {
+  cursor: move;
+}
+text {
+  fill: black;
+  font: 10px sans-serif;
+  pointer-events: none;
+  font-weight: bold;
+  text-anchor: middle;
+}
+.node-label {
+  font-size: 10px;
+  fill: #000000;
+}
+.edge {
+  stroke: #000000;
+  stroke-width: 1.5px;
+  fill: none;
+  opacity: 0.5;
+}
+</style>
+<meta charset="utf-8">
+<title>Course Graph - Georgia Tech</title>
+</head>
+<body>
+<div class="visualization-container">
+    <div class="heading">Interactive Visualization for Coursework Taken at Georgia Tech</div>
+    <div class="inner-container">
+        <div class="box" id="unconnected"></div>
+        <div class="box" id="connected"></div>
+    </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/5.16.0/d3.min.js"></script>
+<script>
+function parseEdges(text) {
+    return text.trim().split('\n').map(line => {
+        const matches = line.match(/"([^"]+)"\s*,\s*"([^"]+)"/);
+        if (matches) return { source: matches[1], target: matches[2] };
+        return null;
+    }).filter(edge => edge !== null);
+}
+
+function calculateNodeDepths(nodes, edges) {
+    const depths = new Map();
+    const adjList = new Map();
+    nodes.forEach(node => {
+        depths.set(node.name, -1);
+        adjList.set(node.name, []);
+    });
+
+    edges.forEach(edge => {
+        if (adjList.has(edge.source)) adjList.get(edge.source).push(edge.target);
+    });
+
+    const hasIncoming = new Set(edges.map(e => e.target));
+    const hasOutgoing = new Set(edges.map(e => e.source));
+    nodes.forEach(node => {
+        if (!hasIncoming.has(node.name) && !hasOutgoing.has(node.name)) depths.set(node.name, -1);
+    });
+
+    const rootNodes = nodes.filter(node => !hasIncoming.has(node.name) && hasOutgoing.has(node.name));
+    rootNodes.forEach(root => depths.set(root.name, 0));
+
+    let changed = true;
+    while (changed) {
+        changed = false;
+        edges.forEach(edge => {
+            const sourceDepth = depths.get(edge.source);
+            const targetDepth = depths.get(edge.target);
+            if (sourceDepth !== -1 && (targetDepth === -1 || targetDepth < sourceDepth + 1)) {
+                depths.set(edge.target, sourceDepth + 1);
+                changed = true;
+            }
+        });
+    }
+    return depths;
+}
+
+function getColorForDepth(depth) {
+    if (depth === -1) return '#ADD8E6';
+    const colors = ['#90EE90', '#FFA500', '#FF6347', '#DDA0DD'];
+    return colors[depth] || colors[colors.length - 1];
+}
+
+Promise.all([d3.text("courses.txt"), d3.text("course_relations.txt")]).then(function(results) {
+    const [coursesData, relationsData] = results;
+    const courses = coursesData.trim().split('\n');
+    const edges = parseEdges(relationsData);
+    const tempSvg = d3.select("body").append("svg");
+    const tempText = tempSvg.append("text").style("font", "10px sans-serif").style("font-weight", "bold");
+
+    const nodes = courses.map(course => {
+        tempText.text(course);
+        const bbox = tempText.node().getBBox();
+        return { id: course, name: course, width: bbox.width + 10, height: bbox.height + 10};
+    });
+    tempSvg.remove();
+
+    const connectedSet = new Set();
+    edges.forEach(edge => {
+        connectedSet.add(edge.source);
+        connectedSet.add(edge.target);
+    });
+
+    const unconnectedNodes = nodes.filter(node => !connectedSet.has(node.id));
+    const connectedNodes = nodes.filter(node => connectedSet.has(node.id));
+    const maxNodeWidth = Math.max(...unconnectedNodes.map(n => n.width)) + 2;
+
+d3.select("#unconnected").style("width", maxNodeWidth + "px");
+
+    d3.select("#unconnected").style("width", maxNodeWidth + "px");
+    const unconnectedBox = document.getElementById('unconnected');
+    const connectedBox = document.getElementById('connected');
+    const leftWidth = unconnectedBox.clientWidth - 10;
+    const rightWidth = connectedBox.clientWidth - 10;
+    const leftHeight = Math.min((unconnectedNodes.length * 40) + 20, unconnectedBox.clientHeight - 10);
+    const rightHeight = connectedBox.clientHeight - 10;
+
+    const leftSvg = d3.select("#unconnected").append("svg")
+        .attr("width", leftWidth)
+        .attr("height", leftHeight);
+
+    const rightSvg = d3.select("#connected").append("svg")
+        .attr("width", rightWidth)
+        .attr("height", rightHeight);
+
+    const nodeMap = {};
+    nodes.forEach(node => nodeMap[node.id] = node);
+    const links = edges.map(edge => ({
+        source: nodeMap[edge.source],
+        target: nodeMap[edge.target]
+    }));
+
+    const nodeDepths = calculateNodeDepths(nodes, edges);
+    nodes.forEach(node => node.depth = nodeDepths.get(node.name));
+
+    const depthGroups = new Map();
+    connectedNodes.forEach(node => {
+        if (!depthGroups.has(node.depth)) depthGroups.set(node.depth, []);
+        depthGroups.get(node.depth).push(node);
+    });
+
+    const maxDepth = Math.max(...Array.from(depthGroups.keys()));
+    const depthHeight = rightHeight / (maxDepth + 2);
+    depthGroups.forEach((nodesInDepth, depth) => {
+        const depthY = (depth + 1) * depthHeight;
+        const xSpacing = rightWidth / (nodesInDepth.length + 1);
+        nodesInDepth.forEach((node, i) => {
+            node.y = depthY;
+            node.x = (i + 1) * xSpacing;
+        });
+    });
+
+    const spacing = leftHeight / (unconnectedNodes.length + 1);
+    unconnectedNodes.forEach((node, i) => {
+        node.fx = leftWidth / 2;
+        node.fy = spacing * (i + 1);
+    });
+
+    const staticNodes = leftSvg.append("g")
+        .selectAll("g")
+        .data(unconnectedNodes)
+        .enter()
+        .append("g")
+        .attr("transform", d => `translate(${d.fx},${d.fy})`);
+
+    staticNodes.append("rect")
+        .attr("width", d => d.width)
+        .attr("height", d => d.height)
+        .attr("x", d => -d.width/2)
+        .attr("y", d => -d.height/2)
+        .attr("rx", 3)
+        .attr("ry", 3)
+        .attr("fill", d => getColorForDepth(d.depth));
+
+    staticNodes.append("text")
+        .text(d => d.name)
+        .attr("class", "node-label");
+
+    const simulation = d3.forceSimulation(connectedNodes)
+        .force("link", d3.forceLink(links).id(d => d.id).distance(150))
+        .force("charge", d3.forceManyBody().strength(-800).distanceMin(80))
+        .force("collision", d3.forceCollide().radius(d => Math.max(d.width, d.height) / 2).strength(1).iterations(4))
+        .force("x", d3.forceX(d => d.x).strength(0.2))
+        .force("y", d3.forceY(d => d.y).strength(0.4))
+        .alpha(0.2)
+        .alphaDecay(0.05)
+        .velocityDecay(0.6);
+
+    const link = rightSvg.append("g")
+        .selectAll("line")
+        .data(links)
+        .enter()
+        .append("line")
+        .attr("class", "edge");
+
+    const node = rightSvg.append("g")
+        .selectAll("g")
+        .data(connectedNodes)
+        .enter()
+        .append("g")
+        .attr("class", "interactive")
+        .call(d3.drag()
+            .on("start", dragstarted)
+            .on("drag", dragged)
+            .on("end", dragended));
+
+    node.append("rect")
+        .attr("width", d => d.width)
+        .attr("height", d => d.height)
+        .attr("x", d => -d.width/2)
+        .attr("y", d => -d.height/2)
+        .attr("rx", 3)
+        .attr("ry", 3)
+        .attr("fill", d => getColorForDepth(d.depth))
+        .on("mouseover", function() {
+            d3.select(this).transition().duration(150).attr("fill", "#FFD700");
+        })
+        .on("mouseout", function(d) {
+            d3.select(this).transition().duration(150).attr("fill", getColorForDepth(d.depth));
+        });
+
+    node.append("text")
+        .text(d => d.name)
+        .attr("class", "node-label");
+
+    function ticked() {
+        const margin = 20;
+        connectedNodes.forEach(node => {
+            const halfWidth = node.width / 2;
+            const halfHeight = node.height / 2;
+            node.x = Math.max(halfWidth + margin, Math.min(rightWidth - halfWidth - margin, node.x));
+            node.y = Math.max(halfHeight + margin, Math.min(rightHeight - halfHeight - margin, node.y));
+        });
+        
+        link
+            .attr("x1", d => d.source.x)
+            .attr("y1", d => d.source.y)
+            .attr("x2", d => d.target.x)
+            .attr("y2", d => d.target.y);
+        
+        node.attr("transform", d => `translate(${d.x},${d.y})`);
+    }
+
+    function dragstarted(d) {
+        if (!d3.event.active) simulation.alphaTarget(0.1).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+    }
+
+    function dragged(d) {
+        const margin = 20;
+        d.fx = Math.max(d.width/2 + margin, Math.min(rightWidth - d.width/2 - margin, d3.event.x));
+        d.fy = Math.max(d.height/2 + margin, Math.min(rightHeight - d.height/2 - margin, d3.event.y));
+    }
+
+    function dragended(d) {
+        if (!d3.event.active) simulation.alphaTarget(0);
+        d.fx = null;
+        d.fy = null;
+    }
+
+    simulation.on("tick", ticked);
+}).catch(function(error) {
+    console.error("Error loading the files:", error);
+});
+</script>
+</body>
+</html>

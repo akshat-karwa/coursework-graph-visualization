@@ -1,0 +1,43 @@
+Scientific Foundations of Health
+Differential Calculus
+Integral Calculus
+Multivariable Calculus
+American Government (Comparative Perspective)
+English Composition I
+English Composition II
+Physics I
+Physics II
+Chemistry for Engineers
+Linear Algebra
+Psychology
+Computing with Python
+Object-Oriented Programming
+Data Structures and Algorithms
+Discrete Mathematics
+Objects & Design (SWE Principles)
+Computing, Society and Professionalism
+Computer Organisation and Programming
+Computer Systems & Networks
+Design & Analysis of Algorithms
+Artificial Intelligence
+Perception & Robotics
+Computer Vision
+Machine Learning
+Deep Learning
+Statistics & Applications
+Applied Combinatorics
+Database Systems
+Information Security
+Internet Systems & Services
+Exploring Grand Challenges
+Teams and Collaboration
+Tech Communication
+Finance & Investments
+Deep Learning for Text Data
+Data & Visual Analytics
+Data Science for Epidemology
+Customer Relationship Management
+Global Economics
+Philosophy
+Sociology
+World Religions
